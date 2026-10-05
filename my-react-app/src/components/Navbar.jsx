@@ -1,6 +1,6 @@
 import React from "react";
 import { IoBagHandleSharp, IoLogOutOutline } from "react-icons/io5";
-import { IoIosSend } from "react-icons/io";
+import { FaUserTie } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 
 const Navbar = () => {
@@ -10,6 +10,7 @@ const Navbar = () => {
     sessionStorage.removeItem("isAuthenticated");
     localStorage.removeItem("isAuthenticated");
     sessionStorage.removeItem("user");
+    localStorage.removeItem("user");
     navigate("/", { replace: true });
   };
 
@@ -36,11 +37,13 @@ const Navbar = () => {
         </nav>
 
         <div className="flex items-center gap-2 sm:gap-3">
-          <button className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 px-3.5 py-2 text-xs font-semibold text-white shadow-lg shadow-cyan-500/30 transition hover:scale-[1.02] sm:px-4 sm:py-2.5 sm:text-sm">
-            <IoIosSend className="text-base" />
-            Post Job
+
+          <button onClick={() => navigate("/profile")}
+           className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 px-3.5 py-2 text-xs font-semibold text-white shadow-lg shadow-cyan-500/30 transition hover:scale-[1.02] sm:px-4 sm:py-2.5 sm:text-sm">
+            <FaUserTie />
+            Profile
           </button>
-          
+
           <button
             onClick={handleLogout}
             className="flex items-center gap-1.5 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3.5 py-2 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/20 sm:px-4 sm:py-2.5 sm:text-sm"

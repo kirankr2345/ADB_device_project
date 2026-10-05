@@ -1,6 +1,5 @@
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
-import tailwindcss from '@tailwindcss/vite'
 
 // Capacitor's Android WebView serves the app from a local origin. The
 // `crossorigin` attribute Vite adds to the built <script>/<link> tags makes
@@ -31,7 +30,7 @@ export default defineConfig({
   // Relative base so assets resolve correctly inside the packaged APK
   // regardless of the scheme/origin the WebView uses.
   base: './',
-  plugins: [react(), tailwindcss(), stripCrossOrigin()],
+  plugins: [react(), stripCrossOrigin()],
   server: listen,
   preview: listen,
 })

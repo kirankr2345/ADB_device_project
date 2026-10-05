@@ -1,16 +1,14 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import Main from "./components/main";
+import UserProfile from "./components/Accounts/UserProfile";
+import JobDetails from "./components/Jobs/JobDetails";
 import { IoBagHandleSharp, IoSettingsOutline, IoCheckmarkCircle, IoWarningOutline, IoRefresh } from "react-icons/io5";
 
-// Smart API URL Detection with fallback options for ADB / Mobile / Web.
-// On a native (Capacitor) build the app is served from http://localhost, so we
-// cannot reach the dev machine that way. Default to 127.0.0.1:8000, which maps
-// back to the PC for BOTH emulators and physical devices once you run:
-//     adb reverse tcp:8000 tcp:8000
-// (10.0.2.2 only works on the Android emulator, so it is not the default.)
 const getDefaultApiUrl = () => {
+  if (typeof window === "undefined") return "http://127.0.0.1:8000/account";
+
   const saved = localStorage.getItem("custom_api_url");
   if (saved) return saved;
 
@@ -28,36 +26,38 @@ const getDefaultApiUrl = () => {
 
 const LoginPage = () => {
   const navigate = useNavigate();
-  const [mode, setMode] = useState("login"); // 'login' | 'register'
+  const timerRef = useRef(null);
+
+  const [mode, setMode] = useState("login"); // Mode: 'login' | 'register'
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [message, setMessage] = useState({ text: "", type: "" }); // type: 'success' | 'error' | 'info'
+  const [message, setMessage] = useState({ text: "", type: "" }); // Type: 'success' | 'error' | 'info'
   const [loading, setLoading] = useState(false);
 
   // API configuration state
   const [apiUrl, setApiUrl] = useState(getDefaultApiUrl());
   const [customIp, setCustomIp] = useState("");
   const [showSettings, setShowSettings] = useState(false);
-  const [pingStatus, setPingStatus] = useState({ state: "idle", msg: "" }); // 'idle' | 'testing' | 'success' | 'error'
+  const [pingStatus, setPingStatus] = useState({ state: "idle", msg: "" }); // State: 'idle' | 'testing' | 'success' | 'error'
 
   useEffect(() => {
     // If user is already authenticated, redirect to /main
     if (sessionStorage.getItem("isAuthenticated") === "true" || localStorage.getItem("isAuthenticated") === "true") {
       navigate("/main");
     }
-  }, [navigate]);
 
-  const saveApiUrl = (newUrl) => {
-    const formatted = newUrl.replace(/\/+$/, '');
-    setApiUrl(formatted);
-    localStorage.setItem("custom_api_url", formatted);
-    testConnection(formatted);
-  };
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
+    };
+  }, [navigate]);
 
   const testConnection = async (targetUrl = apiUrl) => {
     setPingStatus({ state: "testing", msg: "Connecting to server..." });
     try {
-      const pingEndpoint = targetUrl.endsWith('/account') ? `${targetUrl}/ping/` : `${targetUrl}/account/ping/`;
+      const cleanUrl = (targetUrl || "").replace(/\/+$/, "");
+      const pingEndpoint = cleanUrl.endsWith("/account") ? `${cleanUrl}/ping/` : `${cleanUrl}/account/ping/`;
       const res = await axios.get(pingEndpoint, { timeout: 4000 });
       if (res.data?.status === "ok") {
         setPingStatus({ state: "success", msg: "Server connected successfully!" });
@@ -65,11 +65,18 @@ const LoginPage = () => {
         setPingStatus({ state: "success", msg: "Server responded" });
       }
     } catch (err) {
-      setPingStatus({ 
-        state: "error", 
-        msg: err.code === "ECONNABORTED" ? "Timeout: Server unreachable" : (err.message || "Failed to connect to backend") 
+      setPingStatus({
+        state: "error",
+        msg: err.code === "ECONNABORTED" ? "Timeout: Server unreachable" : (err.message || "Failed to connect to backend")
       });
     }
+  };
+
+  const saveApiUrl = (newUrl) => {
+    const formatted = newUrl.replace(/\/+$/, "");
+    setApiUrl(formatted);
+    localStorage.setItem("custom_api_url", formatted);
+    testConnection(formatted);
   };
 
   const registerUser = async () => {
@@ -118,10 +125,10 @@ const LoginPage = () => {
           sessionStorage.setItem("user", JSON.stringify(response.data.user));
         }
         setMessage({ text: response.data.message || "Login successful!", type: "success" });
-        setTimeout(() => navigate("/main"), 300);
+        timerRef.current = setTimeout(() => navigate("/main"), 300);
       }
     } catch (error) {
-      const errorMsg = error.response?.data?.error || error.response?.data?.detail || "Login failed. Ensure backend is running and username/password are correct.";
+      const errorMsg = error.response?.data?.error || error.response?.data?.detail || error.message || "Login failed. Ensure backend is running and username/password are correct.";
       setMessage({ text: errorMsg, type: "error" });
     } finally {
       setLoading(false);
@@ -135,6 +142,12 @@ const LoginPage = () => {
     } else {
       await loginUser();
     }
+  };
+
+  const getPingStatusColor = (state) => {
+    if (state === "success") return "text-emerald-400";
+    if (state === "error") return "text-rose-400";
+    return "text-slate-400";
   };
 
   return (
@@ -357,7 +370,9 @@ const LoginPage = () => {
                   <button
                     type="button"
                     onClick={() => {
-                      if (customIp.trim()) saveApiUrl(customIp.trim());
+                      if (customIp.trim()) {
+                        saveApiUrl(customIp.trim());
+                      }
                     }}
                     className="rounded-lg bg-cyan-600 px-3 py-1.5 font-semibold text-white hover:bg-cyan-500"
                   >
@@ -377,15 +392,7 @@ const LoginPage = () => {
                   </button>
 
                   {pingStatus.msg && (
-                    <span
-                      className={`text-[11px] font-medium ${
-                        pingStatus.state === "success"
-                          ? "text-emerald-400"
-                          : pingStatus.state === "error"
-                          ? "text-rose-400"
-                          : "text-slate-400"
-                      }`}
-                    >
+                    <span className={`text-[11px] font-medium ${getPingStatusColor(pingStatus.state)}`}>
                       {pingStatus.msg}
                     </span>
                   )}
@@ -417,6 +424,22 @@ const App = () => {
         element={
           <ProtectedRoute>
             <Main />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/profile"
+        element={
+          <ProtectedRoute>
+            <UserProfile />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/jobs/:jobId"
+        element={
+          <ProtectedRoute>
+            <JobDetails />
           </ProtectedRoute>
         }
       />

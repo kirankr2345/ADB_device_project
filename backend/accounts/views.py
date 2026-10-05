@@ -4,6 +4,9 @@ from django.contrib.auth import authenticate, login, logout
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
+from .serializer import *
+
+
 
 @api_view(['GET'])
 @csrf_exempt
@@ -52,4 +55,23 @@ def login_user(request):
 def logout_user(request):
     logout(request)
     return Response({'message': 'User logged out successfully'})
+
+
+
+
+
+@api_view(['GET'])
+def get_CandidateProfile(request):
+    candidate_profiles = CandidateProfile.objects.all()
+    serializer = CandidateProfileSerializer(candidate_profiles, many=True)
+    return Response(serializer.data)
+
+@api_view(['GET'])
+def get_UserProfile(request):
+    user_profiles = UserProfile.objects.all()
+    serializer = UserProfileSerializer(user_profiles, many=True)
+    return Response(serializer.data)
+
+
+
 
