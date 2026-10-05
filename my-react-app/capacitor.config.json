@@ -1,0 +1,13 @@
+{
+  "appId": "com.example.myreactapp",
+  "appName": "MyReactApp",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "http",
+    "allowNavigation": [
+      "localhost",
+      "127.0.0.1",
+      "10.0.2.2"
+    ]
+  }
+}
