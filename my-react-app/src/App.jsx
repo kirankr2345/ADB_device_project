@@ -79,6 +79,8 @@ const LoginPage = () => {
     testConnection(formatted);
   };
 
+  const [role, setRole] = useState("candidate"); // 'candidate' | 'recruiter'
+
   const registerUser = async () => {
     if (!username.trim() || !password.trim()) {
       setMessage({ text: "Please enter both username and password.", type: "error" });
@@ -87,7 +89,7 @@ const LoginPage = () => {
     setLoading(true);
     setMessage({ text: "", type: "" });
     try {
-      const response = await axios.post(`${apiUrl}/register/`, { username, password });
+      const response = await axios.post(`${apiUrl}/register/`, { username, password, role });
       if (response.data.error) {
         setMessage({ text: response.data.error, type: "error" });
       } else {
@@ -123,6 +125,7 @@ const LoginPage = () => {
         localStorage.setItem("isAuthenticated", "true");
         if (response.data.user) {
           sessionStorage.setItem("user", JSON.stringify(response.data.user));
+          localStorage.setItem("user", JSON.stringify(response.data.user));
         }
         setMessage({ text: response.data.message || "Login successful!", type: "success" });
         timerRef.current = setTimeout(() => navigate("/main"), 300);
@@ -267,6 +270,32 @@ const LoginPage = () => {
                 className="w-full rounded-xl border border-slate-700/60 bg-slate-950/80 px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20"
               />
             </div>
+
+            {mode === "register" && (
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-slate-300">I am joining as a</label>
+                <div className="grid grid-cols-2 gap-2 rounded-xl border border-slate-800 bg-slate-950/80 p-1">
+                  <button
+                    type="button"
+                    onClick={() => setRole("candidate")}
+                    className={`rounded-lg py-2 text-xs font-bold transition ${
+                      role === "candidate" ? "bg-cyan-500 text-slate-950 shadow-md" : "text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    Job Candidate
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRole("recruiter")}
+                    className={`rounded-lg py-2 text-xs font-bold transition ${
+                      role === "recruiter" ? "bg-purple-600 text-white shadow-md" : "text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    Recruiter
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Notification Banner */}
             {message.text && (

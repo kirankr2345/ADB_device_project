@@ -9,344 +9,417 @@ import {
   IoLocationOutline,
   IoPersonOutline,
   IoSaveOutline,
+  IoDocumentAttachOutline,
+  IoCloudUploadOutline,
+  IoTrashOutline,
+  IoGlobeOutline,
+  IoLogoLinkedin,
+  IoLogoGithub,
+  IoRefresh
 } from "react-icons/io5";
-
-const readSavedProfile = () => {
-  try {
-    return JSON.parse(localStorage.getItem("user_profile_draft") || "null");
-  } catch {
-    return null;
-  }
-};
-
-const readCurrentUser = () => {
-  try {
-    return JSON.parse(
-      sessionStorage.getItem("user") || localStorage.getItem("user") || "null",
-    );
-  } catch {
-    return null;
-  }
-};
-
-async function getUserProfile(userId, signal) {
-  if (!userId) {
-    throw new Error("Your login details are missing. Sign in again to load your profile.");
-  }
-
-  const apiBase = (localStorage.getItem("custom_api_url") || "http://127.0.0.1:8000/account")
-    .replace(/\/+$/, "");
-  const response = await fetch(`${apiBase}/user-profiles/`, {
-    credentials: "include",
-    signal,
-  });
-
-  if (!response.ok) {
-    throw new Error(`Profile request failed (${response.status}).`);
-  }
-
-  const profiles = await response.json();
-  if (!Array.isArray(profiles)) {
-    throw new Error("The server returned an invalid profile response.");
-  }
-
-  const profile = profiles.find((item) => String(item.user) === String(userId));
-  if (!profile) {
-    throw new Error("No profile is saved for this account yet.");
-  }
-
-  return profile;
-}
-
-const ProfileField = ({ icon: Icon, label, ...inputProps }) => (
-  <label className="block">
-    <span className="mb-2 block text-sm font-medium text-slate-300">{label}</span>
-    <span className="flex items-center gap-3 rounded-xl border border-slate-700 bg-slate-950/70 px-3.5 focus-within:border-cyan-400 focus-within:ring-2 focus-within:ring-cyan-500/15">
-      <Icon className="shrink-0 text-lg text-slate-500" aria-hidden="true" />
-      <input
-        {...inputProps}
-        className="min-w-0 flex-1 bg-transparent py-3 text-sm text-white outline-none placeholder:text-slate-600"
-      />
-    </span>
-  </label>
-);
+import { api, getCurrentUser, getMediaUrl } from "../../api";
 
 const UserProfile = () => {
   const navigate = useNavigate();
-  const currentUser = readCurrentUser();
-  const savedProfile = readSavedProfile();
-  const [profile, setProfile] = useState(() => ({
+  const currentUser = getCurrentUser();
+
+  const [profile, setProfile] = useState({
     username: currentUser?.username || "",
-    role: "candidate",
+    role: currentUser?.role || "candidate",
     phone: "",
     location: "",
-    ...savedProfile,
-  }));
-  const [profileImage, setProfileImage] = useState("");
-  const [saved, setSaved] = useState(false);
+    headline: "",
+    bio: "",
+    current_job_title: "",
+    experience_years: "0",
+    expected_salary: "",
+    preferred_location: "",
+    linkedin_url: "",
+    github_url: "",
+    portfolio_url: "",
+  });
+
+  const [resumes, setResumes] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState({ text: "", type: "" });
+  const [uploadingResume, setUploadingResume] = useState(false);
 
-  useEffect(() => {
-    const controller = new AbortController();
+  const fetchProfileAndResumes = async () => {
+    if (!currentUser?.id) {
+      setLoading(false);
+      return;
+    }
+    try {
+      const [profRes, resRes] = await Promise.all([
+        api.getProfile(currentUser.id),
+        api.getResumes(currentUser.id),
+      ]);
 
-    getUserProfile(currentUser?.id, controller.signal)
-      .then((data) => {
-        setProfile((current) => ({
-          ...current,
-          id: data.id,
-          userId: data.user,
-          username: currentUser.username || current.username,
-          role: data.role || "candidate",
-          phone: data.phone || "",
-          location: data.location || "",
-          profileImageUrl: data.profile_image || "",
-          createdAt: data.created_at || "",
-          updatedAt: data.updated_at || "",
-        }));
-        setLoadError("");
-      })
-      .catch((error) => {
-        if (error.name !== "AbortError") setLoadError(error.message);
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
+      const uProf = profRes.data?.user_profile || {};
+      const cProf = profRes.data?.candidate_profile || {};
 
-    return () => controller.abort();
-  }, [currentUser?.id, currentUser?.username]);
+      setProfile((prev) => ({
+        ...prev,
+        role: uProf.role || prev.role,
+        phone: uProf.phone || "",
+        location: uProf.location || "",
+        headline: cProf.headline || "",
+        bio: cProf.bio || "",
+        current_job_title: cProf.current_job_title || "",
+        experience_years: cProf.experience_years != null ? String(cProf.experience_years) : "0",
+        expected_salary: cProf.expected_salary != null ? String(cProf.expected_salary) : "",
+        preferred_location: cProf.preferred_location || "",
+        linkedin_url: cProf.linkedin_url || "",
+        github_url: cProf.github_url || "",
+        portfolio_url: cProf.portfolio_url || "",
+      }));
 
-  useEffect(() => () => {
-    if (profileImage) URL.revokeObjectURL(profileImage);
-  }, [profileImage]);
-
-  const updateField = (event) => {
-    setProfile((current) => ({ ...current, [event.target.name]: event.target.value }));
-    setSaved(false);
-  };
-
-  const handleImageChange = (event) => {
-    const image = event.target.files?.[0];
-    if (image) {
-      setProfileImage(URL.createObjectURL(image));
-      setSaved(false);
+      setResumes(Array.isArray(resRes.data) ? resRes.data : []);
+    } catch (err) {
+      console.error("Failed to load profile:", err);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const saveProfile = (event) => {
-    event.preventDefault();
-    localStorage.setItem("user_profile_draft", JSON.stringify({
-      role: profile.role,
-      phone: profile.phone,
-      location: profile.location,
-    }));
-    setSaved(true);
+  useEffect(() => {
+    fetchProfileAndResumes();
+  }, [currentUser?.id]);
+
+  const updateField = (e) => {
+    setProfile({ ...profile, [e.target.name]: e.target.value });
+    setMessage({ text: "", type: "" });
   };
 
-  const initials = profile.username.trim().slice(0, 1).toUpperCase() || "U";
-  const apiBase = (localStorage.getItem("custom_api_url") || "http://127.0.0.1:8000/account")
-    .replace(/\/+$/, "");
-  const backendOrigin = apiBase.replace(/\/account\/?$/, "");
-  const savedImageUrl = profile.profileImageUrl
-    ? new URL(
-      profile.profileImageUrl.replace(/^\/+/, ""),
-      `${backendOrigin}/media/`,
-    ).toString()
-    : "";
-  const displayedImage = profileImage || savedImageUrl;
+  const handleSaveProfile = async (e) => {
+    e.preventDefault();
+    if (!currentUser?.id) return;
+    setSaving(true);
+    setMessage({ text: "", type: "" });
+
+    try {
+      await api.updateProfile({
+        user_id: currentUser.id,
+        ...profile,
+      });
+
+      // Update local storage user object with new role/phone
+      const updatedUser = { ...currentUser, role: profile.role, phone: profile.phone, location: profile.location };
+      sessionStorage.setItem("user", JSON.stringify(updatedUser));
+      localStorage.setItem("user", JSON.stringify(updatedUser));
+
+      setMessage({ text: "Profile updated and saved to backend successfully!", type: "success" });
+    } catch (err) {
+      console.error("Save profile error:", err);
+      setMessage({ text: "Failed to save profile. Try again.", type: "error" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleResumeUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !currentUser?.id) return;
+    setUploadingResume(true);
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("title", file.name);
+    formData.append("user_id", currentUser.id);
+
+    try {
+      const res = await api.uploadResume(formData);
+      setResumes((prev) => [...prev, res.data]);
+      setMessage({ text: "Resume uploaded successfully!", type: "success" });
+    } catch (err) {
+      console.error("Resume upload error:", err);
+      setMessage({ text: "Failed to upload resume file.", type: "error" });
+    } finally {
+      setUploadingResume(false);
+    }
+  };
+
+  const handleDeleteResume = async (resumeId) => {
+    try {
+      await api.deleteResume(resumeId);
+      setResumes((prev) => prev.filter((r) => r.id !== resumeId));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-950 text-white">
+        <div className="text-center">
+          <IoRefresh className="animate-spin text-3xl text-cyan-400 mx-auto" />
+          <p className="mt-2 text-sm text-slate-400">Loading profile data...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
+      {/* Top Navbar */}
       <header className="border-b border-white/10 bg-slate-950/90">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
           <button
             type="button"
             onClick={() => navigate(-1)}
-            className="inline-flex items-center gap-2 rounded-lg py-2 pr-3 text-sm font-medium text-slate-300 transition hover:text-white"
+            className="inline-flex items-center gap-2 text-sm font-medium text-slate-300 transition hover:text-white"
           >
-            <IoArrowBack aria-hidden="true" />
+            <IoArrowBack />
             Back
           </button>
-          <span className="text-sm font-bold tracking-wide text-white">
+          <span className="text-sm font-bold tracking-wide">
             Career <span className="text-cyan-400">Hub</span>
           </span>
         </div>
       </header>
 
+      {/* Main Container */}
       <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-12">
         <div className="mb-8 border-b border-white/10 pb-6">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-400">
-            Account
+            Account Management
           </p>
-          <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">Your profile</h1>
+          <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">User Profile & Career Resume</h1>
           <p className="mt-2 max-w-xl text-sm leading-6 text-slate-400">
-            Keep your contact details and account type up to date.
+            Keep your contact information, candidate profile, skills, and uploaded resumes updated.
           </p>
         </div>
 
-        <form onSubmit={saveProfile} className="grid gap-8 lg:grid-cols-[280px_minmax(0,1fr)] lg:gap-14">
+        <form onSubmit={handleSaveProfile} className="grid gap-8 lg:grid-cols-[280px_minmax(0,1fr)] lg:gap-14">
+          
+          {/* Left Avatar & Role Card */}
           <aside className="flex flex-col items-center border-b border-white/10 pb-8 text-center lg:items-start lg:border-b-0 lg:border-r lg:pb-0 lg:pr-10 lg:text-left">
-            <div className="relative">
-              <div className="flex h-32 w-32 items-center justify-center overflow-hidden rounded-full border border-cyan-400/30 bg-slate-800 text-4xl font-bold text-cyan-300">
-                {displayedImage ? (
-                  <img src={displayedImage} alt="Profile" className="h-full w-full object-cover" />
-                ) : (
-                  initials
-                )}
-              </div>
-              <label
-                htmlFor="profile-image"
-                title="Choose a profile photo"
-                className="absolute bottom-1 right-1 flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border-2 border-slate-950 bg-cyan-500 text-slate-950 transition hover:bg-cyan-300"
-              >
-                <IoCameraOutline className="text-lg" aria-hidden="true" />
-                <span className="sr-only">Choose a profile photo</span>
-              </label>
-              <input
-                id="profile-image"
-                type="file"
-                accept="image/*"
-                onChange={handleImageChange}
-                className="sr-only"
-              />
+            <div className="flex h-32 w-32 items-center justify-center overflow-hidden rounded-full border border-cyan-400/30 bg-slate-800 text-4xl font-bold text-cyan-300 shadow-xl">
+              {profile.username.trim().slice(0, 1).toUpperCase() || "U"}
             </div>
 
-            <h2 className="mt-5 text-xl font-bold">{profile.username || "Your account"}</h2>
-            <p className="mt-1 text-sm capitalize text-slate-400">{profile.role}</p>
-            <p className="mt-5 max-w-xs text-sm leading-6 text-slate-500">
-              Choose a photo to preview it. Profile image uploads are not supported by the current API.
-            </p>
+            <h2 className="mt-5 text-xl font-bold">{profile.username}</h2>
+            <span className="mt-1 rounded-full bg-cyan-500/20 px-3 py-1 text-xs font-bold uppercase text-cyan-300 border border-cyan-500/30">
+              {profile.role}
+            </span>
+
+            {/* Role Switcher */}
+            <div className="mt-6 w-full space-y-2">
+              <label className="text-xs font-semibold text-slate-400 block">Account Role</label>
+              <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-900 p-1 border border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setProfile({ ...profile, role: "candidate" })}
+                  className={`rounded-lg py-2 text-xs font-bold transition ${
+                    profile.role === "candidate" ? "bg-cyan-500 text-slate-950" : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  Candidate
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setProfile({ ...profile, role: "recruiter" })}
+                  className={`rounded-lg py-2 text-xs font-bold transition ${
+                    profile.role === "recruiter" ? "bg-purple-600 text-white" : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  Recruiter
+                </button>
+              </div>
+            </div>
+
+            {/* Resume Upload Box */}
+            <div className="mt-8 w-full border-t border-slate-800 pt-6">
+              <h3 className="text-sm font-bold text-white mb-3">Resumes & CVs</h3>
+              
+              <div className="space-y-2 mb-4">
+                {resumes.map((r) => (
+                  <div key={r.id} className="flex items-center justify-between rounded-xl bg-slate-900 p-3 text-xs border border-slate-800">
+                    <div className="flex items-center gap-2 truncate">
+                      <IoDocumentAttachOutline className="text-cyan-400 text-lg shrink-0" />
+                      <span className="truncate font-medium">{r.title || `Resume #${r.id}`}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteResume(r.id)}
+                      className="text-rose-400 hover:text-rose-300 ml-2"
+                    >
+                      <IoTrashOutline className="text-base" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-cyan-500/40 bg-cyan-500/10 px-4 py-3 text-xs font-bold text-cyan-300 transition hover:bg-cyan-500/20">
+                <IoCloudUploadOutline className="text-lg" />
+                <span>{uploadingResume ? "Uploading..." : "Upload Resume (PDF)"}</span>
+                <input
+                  type="file"
+                  accept=".pdf,.doc,.docx"
+                  onChange={handleResumeUpload}
+                  disabled={uploadingResume}
+                  className="sr-only"
+                />
+              </label>
+            </div>
           </aside>
 
-          <section className="min-w-0">
-            <div className="mb-6">
-              <h2 className="text-lg font-bold">Profile details</h2>
-              <p className="mt-1 text-sm text-slate-400">Fields marked here match your account profile.</p>
-            </div>
+          {/* Right Form Fields */}
+          <section className="space-y-6">
+            <h2 className="text-xl font-bold text-white border-b border-slate-800 pb-3">Personal & Professional Details</h2>
 
-            {(loading || loadError) && (
+            {message.text && (
               <div
-                role={loadError ? "alert" : "status"}
-                className={`mb-5 rounded-xl border px-4 py-3 text-sm ${
-                  loadError
-                    ? "border-rose-500/30 bg-rose-500/10 text-rose-200"
-                    : "border-slate-700 bg-slate-900 text-slate-300"
+                className={`rounded-xl p-4 text-xs font-medium ${
+                  message.type === "success"
+                    ? "border border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                    : "border border-rose-500/30 bg-rose-500/10 text-rose-300"
                 }`}
               >
-                {loading ? "Loading your profile…" : loadError}
+                {message.text}
               </div>
             )}
 
             <div className="grid gap-5 sm:grid-cols-2">
-              <ProfileField
-                icon={IoPersonOutline}
-                label="Username"
-                name="username"
-                type="text"
-                value={profile.username}
-                placeholder="Your username"
-                readOnly
-                aria-readonly="true"
-              />
-              <ProfileField
-                icon={IoCallOutline}
-                label="Phone number"
-                name="phone"
-                type="tel"
-                value={profile.phone}
-                onChange={updateField}
-                placeholder="Add a phone number"
-                autoComplete="tel"
-              />
-              <div className="sm:col-span-2">
-                <ProfileField
-                  icon={IoLocationOutline}
-                  label="Location"
-                  name="location"
+              <div>
+                <label className="mb-2 block text-xs font-semibold text-slate-300">Username</label>
+                <input
                   type="text"
+                  value={profile.username}
+                  readOnly
+                  className="w-full rounded-xl border border-slate-800 bg-slate-900/50 p-3.5 text-sm text-slate-400 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-xs font-semibold text-slate-300">Phone Number</label>
+                <input
+                  type="tel"
+                  name="phone"
+                  placeholder="+1 (555) 000-0000"
+                  value={profile.phone}
+                  onChange={updateField}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950 p-3.5 text-sm text-white outline-none focus:border-cyan-400"
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="mb-2 block text-xs font-semibold text-slate-300">Headline / Current Title</label>
+                <input
+                  type="text"
+                  name="headline"
+                  placeholder="e.g. Senior Full Stack Developer @ TechCorp"
+                  value={profile.headline}
+                  onChange={updateField}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950 p-3.5 text-sm text-white outline-none focus:border-cyan-400"
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="mb-2 block text-xs font-semibold text-slate-300">Location</label>
+                <input
+                  type="text"
+                  name="location"
+                  placeholder="City, State, Country"
                   value={profile.location}
                   onChange={updateField}
-                  placeholder="City, region or country"
-                  autoComplete="address-level2"
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950 p-3.5 text-sm text-white outline-none focus:border-cyan-400"
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="mb-2 block text-xs font-semibold text-slate-300">Professional Bio</label>
+                <textarea
+                  rows={4}
+                  name="bio"
+                  placeholder="Write a brief overview of your background, achievements, and career goals..."
+                  value={profile.bio}
+                  onChange={updateField}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950 p-3.5 text-sm text-white outline-none focus:border-cyan-400"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-xs font-semibold text-slate-300">Years of Experience</label>
+                <input
+                  type="number"
+                  name="experience_years"
+                  step="0.5"
+                  value={profile.experience_years}
+                  onChange={updateField}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950 p-3.5 text-sm text-white outline-none focus:border-cyan-400"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-xs font-semibold text-slate-300">Expected Salary ($ / yr)</label>
+                <input
+                  type="number"
+                  name="expected_salary"
+                  placeholder="120000"
+                  value={profile.expected_salary}
+                  onChange={updateField}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950 p-3.5 text-sm text-white outline-none focus:border-cyan-400"
                 />
               </div>
             </div>
 
-            <fieldset className="mt-7">
-              <legend className="mb-3 text-sm font-medium text-slate-300">I am a</legend>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {[
-                  { value: "candidate", title: "Candidate", description: "I am looking for opportunities." },
-                  { value: "recruiter", title: "Recruiter", description: "I am hiring for my organization." },
-                ].map((option) => {
-                  const selected = profile.role === option.value;
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      aria-pressed={selected}
-                      onClick={() => {
-                        setProfile((current) => ({ ...current, role: option.value }));
-                        setSaved(false);
-                      }}
-                      className={`flex min-h-24 items-start gap-3 rounded-xl border p-4 text-left transition ${
-                        selected
-                          ? "border-cyan-400/70 bg-cyan-400/10"
-                          : "border-slate-800 bg-slate-900/50 hover:border-slate-700"
-                      }`}
-                    >
-                      <IoBriefcaseOutline className={`mt-0.5 shrink-0 text-lg ${selected ? "text-cyan-300" : "text-slate-500"}`} aria-hidden="true" />
-                      <span>
-                        <span className="block text-sm font-semibold text-white">{option.title}</span>
-                        <span className="mt-1 block text-xs leading-5 text-slate-400">{option.description}</span>
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </fieldset>
+            {/* Social Links */}
+            <div className="border-t border-slate-800 pt-6 space-y-4">
+              <h3 className="text-sm font-bold text-white">Social & Portfolio Links</h3>
+              
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5">
+                  <IoLogoLinkedin className="text-cyan-400 text-lg shrink-0" />
+                  <input
+                    type="url"
+                    name="linkedin_url"
+                    placeholder="LinkedIn URL"
+                    value={profile.linkedin_url}
+                    onChange={updateField}
+                    className="w-full bg-transparent text-xs text-white outline-none placeholder-slate-500"
+                  />
+                </div>
 
-            <dl className="mt-7 grid gap-4 border-t border-white/10 pt-5 text-sm sm:grid-cols-2">
-              <div>
-                <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Profile ID</dt>
-                <dd className="mt-1 text-slate-300">{profile.id || "Not available"}</dd>
-              </div>
-              <div>
-                <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Account user ID</dt>
-                <dd className="mt-1 text-slate-300">{profile.userId || currentUser?.id || "Not available"}</dd>
-              </div>
-              <div>
-                <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Created</dt>
-                <dd className="mt-1 text-slate-300">
-                  {profile.createdAt ? new Date(profile.createdAt).toLocaleString() : "Not available"}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Last updated</dt>
-                <dd className="mt-1 text-slate-300">
-                  {profile.updatedAt ? new Date(profile.updatedAt).toLocaleString() : "Not available"}
-                </dd>
-              </div>
-            </dl>
+                <div className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5">
+                  <IoLogoGithub className="text-cyan-400 text-lg shrink-0" />
+                  <input
+                    type="url"
+                    name="github_url"
+                    placeholder="GitHub URL"
+                    value={profile.github_url}
+                    onChange={updateField}
+                    className="w-full bg-transparent text-xs text-white outline-none placeholder-slate-500"
+                  />
+                </div>
 
-            <div className="mt-8 flex flex-col gap-4 border-t border-white/10 pt-5 sm:flex-row sm:items-center sm:justify-between">
-              <p className="min-h-5 text-xs text-slate-500" aria-live="polite">
-                {saved ? (
-                  <span className="inline-flex items-center gap-1.5 text-emerald-300">
-                    <IoCheckmarkCircle aria-hidden="true" /> Saved on this device
-                  </span>
-                ) : (
-                  "Details are saved locally until profile sync is connected."
-                )}
-              </p>
+                <div className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2.5">
+                  <IoGlobeOutline className="text-cyan-400 text-lg shrink-0" />
+                  <input
+                    type="url"
+                    name="portfolio_url"
+                    placeholder="Portfolio URL"
+                    value={profile.portfolio_url}
+                    onChange={updateField}
+                    className="w-full bg-transparent text-xs text-white outline-none placeholder-slate-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Save Button */}
+            <div className="flex justify-end pt-4 border-t border-slate-800">
               <button
                 type="submit"
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-cyan-500 px-5 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-cyan-300 focus:outline-none focus:ring-2 focus:ring-cyan-300 focus:ring-offset-2 focus:ring-offset-slate-950"
+                disabled={saving}
+                className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-cyan-500/25 hover:scale-[1.02] disabled:opacity-50"
               >
-                <IoSaveOutline className="text-base" aria-hidden="true" />
-                Save profile
+                <IoSaveOutline />
+                {saving ? "Saving..." : "Save Profile"}
               </button>
             </div>
+
           </section>
         </form>
       </main>

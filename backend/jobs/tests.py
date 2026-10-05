@@ -1,8 +1,6 @@
 from django.test import TestCase
 from django.urls import reverse
-
-from .models import Company, Job
-
+from .models import *
 
 class CompanyEndpointTests(TestCase):
 	def setUp(self):

@@ -15,11 +15,19 @@ const stripCrossOrigin = () => ({
 
 const listen = {
   host: true,
-  port: 4173,
-  strictPort: true,
+  port: 5173,
+  strictPort: false,
   allowedHosts: true,
   proxy: {
     '/account': {
+      target: 'http://127.0.0.1:8000',
+      changeOrigin: true,
+    },
+    '/job': {
+      target: 'http://127.0.0.1:8000',
+      changeOrigin: true,
+    },
+    '/recruitment': {
       target: 'http://127.0.0.1:8000',
       changeOrigin: true,
     },
