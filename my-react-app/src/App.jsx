@@ -3,6 +3,7 @@ import axios from "axios";
 import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import Main from "./components/main";
 import UserProfile from "./components/Accounts/UserProfile";
+import JobDetails from "./components/Jobs/JobDetails";
 import { IoBagHandleSharp, IoSettingsOutline, IoCheckmarkCircle, IoWarningOutline, IoRefresh } from "react-icons/io5";
 
 const getDefaultApiUrl = () => {
@@ -431,6 +432,14 @@ const App = () => {
         element={
           <ProtectedRoute>
             <UserProfile />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/jobs/:jobId"
+        element={
+          <ProtectedRoute>
+            <JobDetails />
           </ProtectedRoute>
         }
       />
