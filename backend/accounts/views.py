@@ -2,13 +2,26 @@ from django.shortcuts import render
 from django.contrib.auth.models import User 
 from django.contrib.auth import authenticate, login, logout
 from django.views.decorators.csrf import csrf_exempt
+from django_ratelimit.decorators import ratelimit
 from rest_framework.decorators import api_view
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 from .models import UserProfile, CandidateProfile, RecruiterProfile, Education, Experience, Resume
 from .serializer import (
     UserProfileSerializer, CandidateProfileSerializer, RecruiterProfileSerializer,
     EducationSerializer, ExperienceSerializer, ResumeSerializer, UserSerializer
 )
+
+class ProfileView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response({
+            'user': request.user.username,
+            'email': request.user.email,
+            'id': request.user.id,
+        })
 
 @api_view(['GET'])
 @csrf_exempt
@@ -17,6 +30,7 @@ def ping(request):
 
 @api_view(['POST'])
 @csrf_exempt
+@ratelimit(key='ip', rate='5/m', method='POST', block=True)
 def register_user(request):
     username = request.data.get('username', '').strip()
     password = request.data.get('password', '').strip()
@@ -34,8 +48,7 @@ def register_user(request):
     if role == 'candidate':
         CandidateProfile.objects.get_or_create(user=user)
     elif role == 'recruiter':
-        # RecruiterProfile requires company, handled on company creation or profile setup
-        pass
+        RecruiterProfile.objects.get_or_create(user=user)
 
     return Response({
         'message': 'User registered successfully',
@@ -48,6 +61,7 @@ def register_user(request):
 
 @api_view(["POST"])
 @csrf_exempt
+@ratelimit(key='ip', rate='5/m', method='POST', block=True)
 def login_user(request):
     username = request.data.get('username', '').strip()
     password = request.data.get('password', '').strip()
